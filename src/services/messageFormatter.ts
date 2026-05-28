@@ -52,3 +52,12 @@ export function formatNewIssuesMessage(issues: JiraIssue[]): string {
   const issueLines = issues.map(formatIssueLine);
   return `Nove incidenty:\n\n${joinIssueBlocks(issueLines)}`;
 }
+
+export function formatDiagnosticMessage(issues: JiraIssue[]): string {
+  if (issues.length === 0) {
+    return "Test Jira -> Teams probehl uspesne.\n\nJira dotaz se provedl, ale nevratil zadne incidenty.";
+  }
+
+  const issueLines = issues.map(formatIssueLine);
+  return `Test Jira -> Teams probehl uspesne.\n\nJira vratila ${issues.length} incidentu:\n\n${joinIssueBlocks(issueLines)}`;
+}

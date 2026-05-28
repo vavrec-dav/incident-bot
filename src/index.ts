@@ -3,10 +3,36 @@ import cron from "node-cron";
 import { fetchJiraIssues } from "./clients/jiraClient";
 import { sendTeamsMessage } from "./clients/teamsClient";
 import { CRON_EXPRESSION } from "./config";
-import { prepareJobResult, resetCacheIfNeeded, shouldPauseCachePopulation } from "./services/cacheService";
-import type { JiraIssue } from "./types";
+import {
+  prepareJobResult,
+  resetCacheIfNeeded,
+  shouldPauseCachePopulation,
+} from "./services/cacheService";
+import { formatDiagnosticMessage } from "./services/messageFormatter";
+import type { JiraIssue, JobResult } from "./types";
 
-console.log("Cron job scheduler started.");
+type CliOptions = {
+  runOnce: boolean;
+  ignoreTimeWindow: boolean;
+  forceDiagnosticMessage: boolean;
+};
+
+type RunJobOptions = {
+  ignoreTimeWindow?: boolean;
+  forceDiagnosticMessage?: boolean;
+};
+
+function hasArg(flag: string): boolean {
+  return process.argv.includes(flag);
+}
+
+function getCliOptions(): CliOptions {
+  return {
+    runOnce: hasArg("--run-once"),
+    ignoreTimeWindow: hasArg("--ignore-window"),
+    forceDiagnosticMessage: hasArg("--force-message"),
+  };
+}
 
 function logFetchedIssues(issues: JiraIssue[]): void {
   const issueKeys = issues.map((issue) => issue.key).join(", ") || "<none>";
@@ -18,36 +44,99 @@ function logNewIssues(issues: JiraIssue[]): void {
   console.log(`New Jira issues: ${issueKeys}`);
 }
 
-async function runJob(): Promise<void> {
+function getMessageToSend(
+  issues: JiraIssue[],
+  jobResult: JobResult,
+  shouldForceDiagnosticMessage: boolean,
+): string | undefined {
+  if (jobResult.shouldSendMessage && jobResult.message) {
+    return jobResult.message;
+  }
+
+  if (shouldForceDiagnosticMessage) {
+    return formatDiagnosticMessage(issues);
+  }
+
+  return undefined;
+}
+
+async function runJob({
+  ignoreTimeWindow: skipTimeWindow = false,
+  forceDiagnosticMessage: shouldForceDiagnosticMessage = false,
+}: RunJobOptions = {}): Promise<void> {
   try {
     const now = new Date();
 
     resetCacheIfNeeded(now);
 
-    if (shouldPauseCachePopulation(now)) {
-      console.log("Cache population is paused outside the 09:00-17:00 Prague window.");
-      return;
-    }
+    // if (!skipTimeWindow && shouldPauseCachePopulation(now)) {
+    //   console.log(
+    //     "Cache population is paused outside the 09:00-17:00 Prague window.",
+    //   );
+    //   return;
+    // }
 
     const issues = await fetchJiraIssues();
-    const jobResult = prepareJobResult(issues);
-
     logFetchedIssues(issues);
 
-    if (!jobResult.shouldSendMessage || !jobResult.message) {
+    const jobResult = prepareJobResult(issues);
+    const message = getMessageToSend(
+      issues,
+      jobResult,
+      shouldForceDiagnosticMessage,
+    );
+
+    if (!message) {
+      console.log("No new Jira issues to send.");
       return;
     }
 
-    await sendTeamsMessage(jobResult.message);
-    logNewIssues(jobResult.newIssues);
+    const wasMessageSent = await sendTeamsMessage(message);
+
+    if (!wasMessageSent) {
+      return;
+    }
+
+    if (jobResult.newIssues.length > 0) {
+      logNewIssues(jobResult.newIssues);
+    }
+
     console.log("Teams message sent.");
   } catch (error) {
     console.error("Failed to run cron job.", error);
   }
 }
 
-void runJob();
+function scheduleCronJob(): void {
+  cron.schedule(CRON_EXPRESSION, async () => {
+    await runJob();
+  });
+}
 
-cron.schedule(CRON_EXPRESSION, async () => {
+async function startManualRun(options: CliOptions): Promise<void> {
+  console.log("Manual run started.");
+
+  await runJob({
+    ignoreTimeWindow: options.ignoreTimeWindow,
+    forceDiagnosticMessage: options.forceDiagnosticMessage,
+  });
+}
+
+async function startScheduler(): Promise<void> {
+  console.log("Cron job scheduler started.");
   await runJob();
-});
+  scheduleCronJob();
+}
+
+async function main(): Promise<void> {
+  const options = getCliOptions();
+
+  if (options.runOnce) {
+    await startManualRun(options);
+    return;
+  }
+
+  await startScheduler();
+}
+
+void main();
