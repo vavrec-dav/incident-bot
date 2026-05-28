@@ -15,3 +15,4 @@ export const config = {
   jiraApiToken: process.env.JIRA_API_TOKEN ?? "",
   jiraJql: process.env.JIRA_JQL ?? DEFAULT_JIRA_JQL
 };
+

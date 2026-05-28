@@ -41,23 +41,23 @@ function joinIssueBlocks(issueLines: string[]): string {
 
 export function formatInitialCacheMessage(issues: JiraIssue[]): string {
   if (issues.length === 0) {
-    return "Ranni stav incidentu:\n\nAktualne jsem nenasel zadne tasky.";
+    return "Ranní stav incidentů:\n\nAktuálně jsem nenašel žádné tasky.";
   }
 
   const issueLines = issues.map(formatIssueLine);
-  return `Ranni stav incidentu:\n\n${joinIssueBlocks(issueLines)}`;
+  return `Ranní stav incidentů:\n\n${joinIssueBlocks(issueLines)}`;
 }
 
 export function formatNewIssuesMessage(issues: JiraIssue[]): string {
   const issueLines = issues.map(formatIssueLine);
-  return `Nove incidenty:\n\n${joinIssueBlocks(issueLines)}`;
+  return `Nové incidenty:\n\n${joinIssueBlocks(issueLines)}`;
 }
 
 export function formatDiagnosticMessage(issues: JiraIssue[]): string {
   if (issues.length === 0) {
-    return "Test Jira -> Teams probehl uspesne.\n\nJira dotaz se provedl, ale nevratil zadne incidenty.";
+    return "Test Jira -> Teams proběhl úspěšně.\n\nJira dotaz se provedl, ale nevrátil žádné incidenty.";
   }
 
   const issueLines = issues.map(formatIssueLine);
-  return `Test Jira -> Teams probehl uspesne.\n\nJira vratila ${issues.length} incidentu:\n\n${joinIssueBlocks(issueLines)}`;
+  return `Test Jira -> Teams proběhl úspěšně.\n\nJira vrátila ${issues.length} incidentů:\n\n${joinIssueBlocks(issueLines)}`;
 }

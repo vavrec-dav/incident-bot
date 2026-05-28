@@ -18,6 +18,7 @@ type CliOptions = {
 };
 
 type RunJobOptions = {
+  isManualRun?: boolean;
   ignoreTimeWindow?: boolean;
   forceDiagnosticMessage?: boolean;
 };
@@ -60,7 +61,17 @@ function getMessageToSend(
   return undefined;
 }
 
+function prependManualRunLabel(message: string, isManualRun: boolean): string {
+  if (!isManualRun) {
+    return message;
+  }
+
+  const normalizedMessage = message.replace(/^Ranní stav incidentů:\n\n/, "");
+  return `Manuální spuštění:\n\n${normalizedMessage}`;
+}
+
 async function runJob({
+  isManualRun = false,
   ignoreTimeWindow: skipTimeWindow = false,
   forceDiagnosticMessage: shouldForceDiagnosticMessage = false,
 }: RunJobOptions = {}): Promise<void> {
@@ -69,12 +80,12 @@ async function runJob({
 
     resetCacheIfNeeded(now);
 
-    // if (!skipTimeWindow && shouldPauseCachePopulation(now)) {
-    //   console.log(
-    //     "Cache population is paused outside the 09:00-17:00 Prague window.",
-    //   );
-    //   return;
-    // }
+    if (!skipTimeWindow && shouldPauseCachePopulation(now)) {
+      console.log(
+        "Cache population is paused outside the 09:00-17:00 Prague window.",
+      );
+      return;
+    }
 
     const issues = await fetchJiraIssues();
     logFetchedIssues(issues);
@@ -91,7 +102,9 @@ async function runJob({
       return;
     }
 
-    const wasMessageSent = await sendTeamsMessage(message);
+    const wasMessageSent = await sendTeamsMessage(
+      prependManualRunLabel(message, isManualRun),
+    );
 
     if (!wasMessageSent) {
       return;
@@ -117,6 +130,7 @@ async function startManualRun(options: CliOptions): Promise<void> {
   console.log("Manual run started.");
 
   await runJob({
+    isManualRun: true,
     ignoreTimeWindow: options.ignoreTimeWindow,
     forceDiagnosticMessage: options.forceDiagnosticMessage,
   });
