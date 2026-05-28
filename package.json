@@ -1,0 +1,20 @@
+{
+  "name": "typescript-cron-job",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Node.js + TypeScript cron job project",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3"
+  }
+}
