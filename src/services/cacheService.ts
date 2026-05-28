@@ -4,12 +4,8 @@ import {
   CACHE_RESET_HOUR,
   PRAGUE_TIME_ZONE
 } from "../config";
-import type { JiraIssue, JobResult } from "../types";
+import type { CacheState, JiraIssue, JobResult } from "../types";
 import { formatInitialCacheMessage, formatNewIssuesMessage } from "./messageFormatter";
-
-const issueCache = new Map<string, JiraIssue>();
-let isCacheInitialized = false;
-let lastCacheResetDate: string | null = null;
 
 function getPragueDateParts(date: Date): { dateKey: string; hour: number; minute: number } {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -33,21 +29,21 @@ function getPragueDateParts(date: Date): { dateKey: string; hour: number; minute
   };
 }
 
-function clearIssueCache(): void {
-  issueCache.clear();
-  isCacheInitialized = false;
+function clearIssueCache(state: CacheState): void {
+  state.issues = [];
+  state.isInitialized = false;
 }
 
-export function resetCacheIfNeeded(date: Date): boolean {
+export function resetCacheIfNeeded(state: CacheState, date: Date): boolean {
   const { dateKey, hour, minute } = getPragueDateParts(date);
 
-  if (lastCacheResetDate === dateKey) {
+  if (state.lastResetDate === dateKey) {
     return false;
   }
 
   if (hour > CACHE_RESET_HOUR || (hour === CACHE_RESET_HOUR && minute >= 0)) {
-    clearIssueCache();
-    lastCacheResetDate = dateKey;
+    clearIssueCache(state);
+    state.lastResetDate = dateKey;
     console.log(`Issue cache cleared for ${dateKey} at 17:00 Prague time.`);
     return true;
   }
@@ -64,20 +60,25 @@ export function shouldPauseCachePopulation(date: Date): boolean {
   return minutesSinceMidnight < refillStartMinutes || minutesSinceMidnight >= resetMinutes;
 }
 
-function cacheIssues(issues: JiraIssue[]): void {
+function cacheIssues(state: CacheState, issues: JiraIssue[]): void {
+  const issueCache = new Map(state.issues.map((issue) => [issue.key, issue]));
+
   for (const issue of issues) {
     issueCache.set(issue.key, issue);
   }
+
+  state.issues = [...issueCache.values()];
 }
 
-function getNewIssues(issues: JiraIssue[]): JiraIssue[] {
-  return issues.filter((issue) => !issueCache.has(issue.key));
+function getNewIssues(state: CacheState, issues: JiraIssue[]): JiraIssue[] {
+  const issueKeys = new Set(state.issues.map((issue) => issue.key));
+  return issues.filter((issue) => !issueKeys.has(issue.key));
 }
 
-export function prepareJobResult(issues: JiraIssue[]): JobResult {
-  if (!isCacheInitialized) {
-    cacheIssues(issues);
-    isCacheInitialized = true;
+export function prepareJobResult(state: CacheState, issues: JiraIssue[]): JobResult {
+  if (!state.isInitialized) {
+    cacheIssues(state, issues);
+    state.isInitialized = true;
 
     return {
       shouldSendMessage: true,
@@ -86,8 +87,8 @@ export function prepareJobResult(issues: JiraIssue[]): JobResult {
     };
   }
 
-  const newIssues = getNewIssues(issues);
-  cacheIssues(newIssues);
+  const newIssues = getNewIssues(state, issues);
+  cacheIssues(state, newIssues);
 
   if (newIssues.length === 0) {
     return {

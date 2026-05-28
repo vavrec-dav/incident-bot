@@ -1,12 +1,10 @@
-import cron from "node-cron";
-
 import { fetchJiraIssues } from "./clients/jiraClient";
 import { sendTeamsMessage } from "./clients/teamsClient";
-import { CRON_EXPRESSION } from "./config";
 import { prepareJobResult, resetCacheIfNeeded, shouldPauseCachePopulation } from "./services/cacheService";
 import type { JiraIssue } from "./types";
+import { loadCacheState, saveCacheState } from "./utils/fileState";
 
-console.log("Cron job scheduler started.");
+console.log("Jira incident sync started.");
 
 function logFetchedIssues(issues: JiraIssue[]): void {
   const issueKeys = issues.map((issue) => issue.key).join(", ") || "<none>";
@@ -21,33 +19,34 @@ function logNewIssues(issues: JiraIssue[]): void {
 async function runJob(): Promise<void> {
   try {
     const now = new Date();
+    const cacheState = await loadCacheState();
 
-    resetCacheIfNeeded(now);
+    resetCacheIfNeeded(cacheState, now);
 
     if (shouldPauseCachePopulation(now)) {
-      console.log("Cache population is paused outside the 09:00-17:00 Prague window.");
+      await saveCacheState(cacheState);
+      console.log("Sync is paused outside the 09:00-17:00 Prague window.");
       return;
     }
 
     const issues = await fetchJiraIssues();
-    const jobResult = prepareJobResult(issues);
+    const jobResult = prepareJobResult(cacheState, issues);
 
     logFetchedIssues(issues);
 
     if (!jobResult.shouldSendMessage || !jobResult.message) {
+      await saveCacheState(cacheState);
       return;
     }
 
     await sendTeamsMessage(jobResult.message);
     logNewIssues(jobResult.newIssues);
+    await saveCacheState(cacheState);
     console.log("Teams message sent.");
   } catch (error) {
     console.error("Failed to run cron job.", error);
+    process.exitCode = 1;
   }
 }
 
 void runJob();
-
-cron.schedule(CRON_EXPRESSION, async () => {
-  await runJob();
-});

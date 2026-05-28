@@ -26,3 +26,9 @@ export type JobResult = {
   message?: string;
   newIssues: JiraIssue[];
 };
+
+export type CacheState = {
+  issues: JiraIssue[];
+  isInitialized: boolean;
+  lastResetDate: string | null;
+};
